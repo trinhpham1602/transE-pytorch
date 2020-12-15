@@ -83,8 +83,6 @@ def test(model: torch.nn.Module, data_generator: torch_data.DataLoader, entities
                                      ground_truth_entity_id, device=device, k=3)
         hits_at_10 += metric.hit_at_k(predictions,
                                       ground_truth_entity_id, device=device, k=10)
-        print('current core on batch size {}: hist@1: {}, hist@3: {}, hist@10: {} ',
-              current_batch_size, hits_at_1, hits_at_3, hits_at_10)
         mrr += metric.mrr(predictions, ground_truth_entity_id)
 
         examples_count += predictions.size()[0]
@@ -161,7 +159,7 @@ def main(_):
         for local_heads, local_relations, local_tails in train_generator:
             local_heads, local_relations, local_tails = (local_heads.to(device), local_relations.to(device),
                                                          local_tails.to(device))
-
+            print(local_heads)
             positive_triples = torch.stack(
                 (local_heads, local_relations, local_tails), dim=1)
 
@@ -193,7 +191,6 @@ def main(_):
             loss = loss.data.cpu()
             loss_impacting_samples_count += loss.nonzero().size()[0]
             samples_count += loss.size()[0]
-            print("at epoch {}, loss: {}", epoch_id, loss.nonzero().size()[0])
             optimizer.step()
             step += 1
 
