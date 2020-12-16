@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import os
 
 
 class TransE(nn.Module):
@@ -22,6 +23,14 @@ class TransE(nn.Module):
                                     padding_idx=self.entity_count)
         uniform_range = 6 / np.sqrt(self.dim)
         entities_emb.weight.data.uniform_(-uniform_range, uniform_range)
+        # luu vao mot file text
+        folder = "init_entities_emb"
+        path = os.path.join("./", folder)
+        if not os.path.exists(folder):
+            os.mkdir(path)
+        #
+        entities_emb.numpy().savetxt(path + "/" + "init_entities_emb.txt")
+
         return entities_emb
 
     def _init_relation_emb(self):

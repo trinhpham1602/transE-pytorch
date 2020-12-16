@@ -159,7 +159,6 @@ def main(_):
         for local_heads, local_relations, local_tails in train_generator:
             local_heads, local_relations, local_tails = (local_heads.to(device), local_relations.to(device),
                                                          local_tails.to(device))
-            print(local_heads)
             positive_triples = torch.stack(
                 (local_heads, local_relations, local_tails), dim=1)
 
@@ -196,18 +195,18 @@ def main(_):
 
         summary_writer.add_scalar('Metrics/loss_impacting_samples', loss_impacting_samples_count / samples_count * 100,
                                   global_step=epoch_id)
-
-        if epoch_id % FLAGS.validation_freq == 0:
-            model.eval()
-            _, _, hits_at_10, _ = test(model=model, data_generator=validation_generator,
-                                       entities_count=len(entity2id),
-                                       device=device, summary_writer=summary_writer,
-                                       epoch_id=epoch_id, metric_suffix="val")
-            score = hits_at_10
-            if score > best_score:
-                best_score = score
-                storage.save_checkpoint(
-                    model, optimizer, epoch_id, step, best_score)
+    print(model.entities_emb)
+    if epoch_id % FLAGS.validation_freq == 0:
+        model.eval()
+        _, _, hits_at_10, _ = test(model=model, data_generator=validation_generator,
+                                   entities_count=len(entity2id),
+                                   device=device, summary_writer=summary_writer,
+                                   epoch_id=epoch_id, metric_suffix="val")
+        score = hits_at_10
+        if score > best_score:
+            best_score = score
+            storage.save_checkpoint(
+                model, optimizer, epoch_id, step, best_score)
 
     # Testing the best checkpoint on test dataset
     storage.load_checkpoint("checkpoint.tar", model, optimizer)
