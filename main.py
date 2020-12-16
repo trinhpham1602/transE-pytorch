@@ -10,6 +10,7 @@ import torch.optim as optim
 from torch.utils import data as torch_data
 from torch.utils import tensorboard
 from typing import Tuple
+import numpy as np
 
 FLAGS = flags.FLAGS
 flags.DEFINE_float("lr", default=0.01, help="Learning rate value.")
@@ -23,7 +24,7 @@ flags.DEFINE_float("margin", default=1.0,
                    help="Margin value in margin-based ranking loss.")
 flags.DEFINE_integer(
     "norm", default=1, help="Norm used for calculating dissimilarity metric (usually 1 or 2).")
-flags.DEFINE_integer("epochs", default=50, help="Number of training epochs.")
+flags.DEFINE_integer("epochs", default=1, help="Number of training epochs.")
 flags.DEFINE_string("dataset_path", default="./data/FB15k-237",
                     help="Path to dataset.")
 flags.DEFINE_bool("use_gpu", default=True, help="Flag enabling gpu usage.")
@@ -195,7 +196,12 @@ def main(_):
 
         summary_writer.add_scalar('Metrics/loss_impacting_samples', loss_impacting_samples_count / samples_count * 100,
                                   global_step=epoch_id)
-    print(model.entities_emb)
+    folder = "target_entities_emb"
+    path = os.path.join("./", folder)
+    if not os.path.exists(folder):
+        os.mkdir(path)
+    np.savetxt(
+        path + "/" + "target_entities_emb.txt", entities_emb.weight.data.numpy())
     if epoch_id % FLAGS.validation_freq == 0:
         model.eval()
         _, _, hits_at_10, _ = test(model=model, data_generator=validation_generator,
@@ -209,12 +215,12 @@ def main(_):
                 model, optimizer, epoch_id, step, best_score)
 
     # Testing the best checkpoint on test dataset
-    storage.load_checkpoint("checkpoint.tar", model, optimizer)
-    best_model = model.to(device)
-    best_model.eval()
-    scores = test(model=best_model, data_generator=test_generator, entities_count=len(entity2id), device=device,
-                  summary_writer=summary_writer, epoch_id=1, metric_suffix="test")
-    print("Test scores: ", scores)
+    # storage.load_checkpoint("checkpoint.tar", model, optimizer)
+    # best_model = model.to(device)
+    # best_model.eval()
+    # scores = test(model=best_model, data_generator=test_generator, entities_count=len(entity2id), device=device,
+    #               summary_writer=summary_writer, epoch_id=1, metric_suffix="test")
+    # print("Test scores: ", scores)
 
 
 if __name__ == '__main__':

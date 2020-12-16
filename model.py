@@ -29,7 +29,8 @@ class TransE(nn.Module):
         if not os.path.exists(folder):
             os.mkdir(path)
         #
-        entities_emb.numpy().savetxt(path + "/" + "init_entities_emb.txt")
+        np.savetxt(path + "/" + "init_entities_emb.txt",
+                   entities_emb.weight.data.numpy())
 
         return entities_emb
 
