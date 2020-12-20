@@ -25,7 +25,7 @@ flags.DEFINE_float("margin", default=1.0,
 flags.DEFINE_integer(
     "norm", default=1, help="Norm used for calculating dissimilarity metric (usually 1 or 2).")
 flags.DEFINE_integer("epochs", default=1, help="Number of training epochs.")
-flags.DEFINE_string("dataset_path", default="./data/FB15k-237",
+flags.DEFINE_string("dataset_path", default="./data/WN18RR",
                     help="Path to dataset.")
 flags.DEFINE_bool("use_gpu", default=True, help="Flag enabling gpu usage.")
 flags.DEFINE_integer("validation_freq", default=10,
@@ -132,7 +132,9 @@ def main(_):
     test_set = data.FB15KDataset(test_path, entity2id, relation2id)
     test_generator = torch_data.DataLoader(
         test_set, batch_size=FLAGS.validation_batch_size)
+    # save id head-relation-tail
 
+    #####################################################################
     model = model_definition.TransE(entity_count=len(entity2id), relation_count=len(relation2id), dim=vector_length,
                                     margin=margin,
                                     device=device, norm=norm)  # type: torch.nn.Module
@@ -144,7 +146,6 @@ def main(_):
     start_epoch_id = 1
     step = 0
     best_score = 0.0
-
     if FLAGS.checkpoint_path:
         start_epoch_id, step, best_score = storage.load_checkpoint(
             FLAGS.checkpoint_path, model, optimizer)
@@ -152,6 +153,9 @@ def main(_):
     print(model)
 
     # Training loop
+    entities_id_order = {}
+    relations_id_order = {}
+
     for epoch_id in range(start_epoch_id, epochs + 1):
         loss_impacting_samples_count = 0
         samples_count = 0
@@ -160,9 +164,22 @@ def main(_):
         for local_heads, local_relations, local_tails in train_generator:
             local_heads, local_relations, local_tails = (local_heads.to(device), local_relations.to(device),
                                                          local_tails.to(device))
+            entities = torch.cat(
+                (local_heads, local_tails), 0).view(-1).numpy()
+            relations = local_relations.view(-1).numpy()
+######################################################
+            for inx in range(len(entities)):
+                if entities[inx] not in entities_id_order.keys():
+                    entities_id_order[entities[inx]] = len(
+                        entities_id_order)
+
+            for inx in range(len(relations)):
+                if relations[inx] not in relations_id_order.keys():
+                    relations_id_order[relations[inx]] = len(
+                        relations_id_order)
+######################################################
             positive_triples = torch.stack(
                 (local_heads, local_relations, local_tails), dim=1)
-
             # Preparing negatives.
             # Generate binary tensor to replace either head or tail. 1 means replace head, 0 means replace tail.
             head_or_tail = torch.randint(
@@ -193,15 +210,44 @@ def main(_):
             samples_count += loss.size()[0]
             optimizer.step()
             step += 1
-
         summary_writer.add_scalar('Metrics/loss_impacting_samples', loss_impacting_samples_count / samples_count * 100,
                                   global_step=epoch_id)
-    folder = "target_entities_emb"
-    path = os.path.join("./", folder)
-    if not os.path.exists(folder):
-        os.mkdir(path)
-    np.savetxt(
-        path + "/" + "target_entities_emb.txt", entities_emb.weight.data.numpy())
+
+    # mapping embedding vector with id order
+    ##########################################################################
+    triplet_emb_matrix = np.empty(
+        (len(train_set), 3, vector_length), dtype=float)
+    dtype = [("distance", float), ("order", int)]
+    distances_inx = []
+    for inx in range(len(train_set.data)):
+        (h, r, t) = train_set.__getitem__(inx)
+        head_order = entities_id_order[h]
+        tail_order = entities_id_order[t]
+        relation_order = relations_id_order[r]
+        triplet_emb_matrix[inx] = [model.entities_emb.weight.data.numpy()[head_order], model.relations_emb.weight.data.numpy()[
+            relation_order], model.entities_emb.weight.data.numpy()[tail_order]]
+        distances_inx.append((np.linalg.norm((model.entities_emb.weight.data.numpy()[head_order] + model.relations_emb.weight.data.numpy()[
+            relation_order] - model.entities_emb.weight.data.numpy()[tail_order]), ord=1), inx))
+
+    ##########################################################################
+
+    # take 10% norm_1(h+r-t) smallest
+    temp = np.array(distances_inx, dtype=dtype)
+    temp = np.sort(temp, order="distance")
+    k_percent_lowest = temp[:int(len(distances_inx)*0.1), ]
+    target_k_percent = triplet_emb_matrix[[val[1] for val in k_percent_lowest]]
+    confident_score = np.ones((len(train_set), 1), dtype=float)
+
+    # make folder to save the target embedding vector
+    # folder = "target_entities_emb"
+    # path = os.path.join("./", folder)
+    # if not os.path.exists(folder):
+    #     os.mkdir(path)
+    # np.savetxt(
+    #     path + "/" + "target_entities_emb.txt", model.entities_emb.weight.data.numpy())
+    # np.savetxt(
+    #     path + "/" + "target_relations_emb.txt", model.relations_emb.weight.data.numpy())
+    # print("alooooooo ", train_set.data[10], train_set.__getitem__(0))
     if epoch_id % FLAGS.validation_freq == 0:
         model.eval()
         _, _, hits_at_10, _ = test(model=model, data_generator=validation_generator,

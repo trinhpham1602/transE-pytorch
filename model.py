@@ -18,26 +18,25 @@ class TransE(nn.Module):
         self.criterion = nn.MarginRankingLoss(margin=margin, reduction='none')
 
     def _init_enitity_emb(self):
-        entities_emb = nn.Embedding(num_embeddings=self.entity_count + 1,
+        entities_emb = nn.Embedding(num_embeddings=self.entity_count,
                                     embedding_dim=self.dim,
-                                    padding_idx=self.entity_count)
+                                    )
         uniform_range = 6 / np.sqrt(self.dim)
         entities_emb.weight.data.uniform_(-uniform_range, uniform_range)
         # luu vao mot file text
-        folder = "init_entities_emb"
-        path = os.path.join("./", folder)
-        if not os.path.exists(folder):
-            os.mkdir(path)
-        #
-        np.savetxt(path + "/" + "init_entities_emb.txt",
-                   entities_emb.weight.data.numpy())
+        # folder = "init_entities_emb"
+        # path = os.path.join("./", folder)
+        # if not os.path.exists(folder):
+        #     os.mkdir(path)
+        # np.savetxt(path + "/" + "init_entities_emb.txt",
+        #            entities_emb.weight.data.numpy())
 
         return entities_emb
 
     def _init_relation_emb(self):
-        relations_emb = nn.Embedding(num_embeddings=self.relation_count + 1,
+        relations_emb = nn.Embedding(num_embeddings=self.relation_count,
                                      embedding_dim=self.dim,
-                                     padding_idx=self.relation_count)
+                                     )
         uniform_range = 6 / np.sqrt(self.dim)
         relations_emb.weight.data.uniform_(-uniform_range, uniform_range)
         # -1 to avoid nan for OOV vector
