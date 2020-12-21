@@ -236,18 +236,17 @@ def main(_):
     temp = np.sort(temp, order="distance")
     k_percent_lowest = temp[:int(len(distances_inx)*0.1), ]
     target_k_percent = triplet_emb_matrix[[val[1] for val in k_percent_lowest]]
+    target_k_percent = target_k_percent.reshape(
+        (len(target_k_percent), 3*vector_length,))
     confident_score = np.ones((len(train_set), 1), dtype=float)
 
     # make folder to save the target embedding vector
-    # folder = "target_entities_emb"
-    # path = os.path.join("./", folder)
-    # if not os.path.exists(folder):
-    #     os.mkdir(path)
-    # np.savetxt(
-    #     path + "/" + "target_entities_emb.txt", model.entities_emb.weight.data.numpy())
-    # np.savetxt(
-    #     path + "/" + "target_relations_emb.txt", model.relations_emb.weight.data.numpy())
-    # print("alooooooo ", train_set.data[10], train_set.__getitem__(0))
+    folder = "target_entities_emb"
+    path = os.path.join("./", folder)
+    if not os.path.exists(folder):
+        os.mkdir(path)
+    np.savetxt(
+        path + "/" + "target_entities_emb.txt", target_k_percent)
     if epoch_id % FLAGS.validation_freq == 0:
         model.eval()
         _, _, hits_at_10, _ = test(model=model, data_generator=validation_generator,
