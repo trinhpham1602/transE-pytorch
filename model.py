@@ -60,7 +60,6 @@ class TransE(nn.Module):
 
         assert negative_triplets.size()[1] == 3
         negative_distances = self._distance(negative_triplets)
-
         # create file contained embedding vector
 
         return self.loss(positive_distances, negative_distances), positive_distances, negative_distances

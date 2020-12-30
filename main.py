@@ -11,6 +11,8 @@ from torch.utils import data as torch_data
 from torch.utils import tensorboard
 from typing import Tuple
 import numpy as np
+import GANs
+import NoiAwareKGE as NoiGANs_definition
 
 FLAGS = flags.FLAGS
 flags.DEFINE_float("lr", default=0.01, help="Learning rate value.")
@@ -42,68 +44,6 @@ MRR_SCORE = float
 METRICS = Tuple[HITS_AT_1_SCORE, HITS_AT_3_SCORE, HITS_AT_10_SCORE, MRR_SCORE]
 
 
-def test(model: torch.nn.Module, data_generator: torch_data.DataLoader, entities_count: int,
-         summary_writer: tensorboard.SummaryWriter, device: torch.device, epoch_id: int, metric_suffix: str,
-         ) -> METRICS:
-    examples_count = 0.0
-    hits_at_1 = 0.0
-    hits_at_3 = 0.0
-    hits_at_10 = 0.0
-    mrr = 0.0
-
-    entity_ids = torch.arange(end=entities_count, device=device).unsqueeze(0)
-    for head, relation, tail in data_generator:
-        current_batch_size = head.size()[0]
-
-        head, relation, tail = head.to(
-            device), relation.to(device), tail.to(device)
-        all_entities = entity_ids.repeat(current_batch_size, 1)
-        heads = head.reshape(-1, 1).repeat(1, all_entities.size()[1])
-        relations = relation.reshape(-1, 1).repeat(1, all_entities.size()[1])
-        tails = tail.reshape(-1, 1).repeat(1, all_entities.size()[1])
-
-        # Check all possible tails
-        triplets = torch.stack(
-            (heads, relations, all_entities), dim=2).reshape(-1, 3)
-        tails_predictions = model.predict(
-            triplets).reshape(current_batch_size, -1)
-        # Check all possible heads
-        triplets = torch.stack(
-            (all_entities, relations, tails), dim=2).reshape(-1, 3)
-        heads_predictions = model.predict(
-            triplets).reshape(current_batch_size, -1)
-
-        # Concat predictions
-        predictions = torch.cat((tails_predictions, heads_predictions), dim=0)
-        ground_truth_entity_id = torch.cat(
-            (tail.reshape(-1, 1), head.reshape(-1, 1)))
-
-        hits_at_1 += metric.hit_at_k(predictions,
-                                     ground_truth_entity_id, device=device, k=1)
-        hits_at_3 += metric.hit_at_k(predictions,
-                                     ground_truth_entity_id, device=device, k=3)
-        hits_at_10 += metric.hit_at_k(predictions,
-                                      ground_truth_entity_id, device=device, k=10)
-        mrr += metric.mrr(predictions, ground_truth_entity_id)
-
-        examples_count += predictions.size()[0]
-
-    hits_at_1_score = hits_at_1 / examples_count * 100
-    hits_at_3_score = hits_at_3 / examples_count * 100
-    hits_at_10_score = hits_at_10 / examples_count * 100
-    mrr_score = mrr / examples_count * 100
-    summary_writer.add_scalar(
-        'Metrics/Hits_1/' + metric_suffix, hits_at_1_score, global_step=epoch_id)
-    summary_writer.add_scalar(
-        'Metrics/Hits_3/' + metric_suffix, hits_at_3_score, global_step=epoch_id)
-    summary_writer.add_scalar(
-        'Metrics/Hits_10/' + metric_suffix, hits_at_10_score, global_step=epoch_id)
-    summary_writer.add_scalar(
-        'Metrics/MRR/' + metric_suffix, mrr_score, global_step=epoch_id)
-
-    return hits_at_1_score, hits_at_3_score, hits_at_10_score, mrr_score
-
-
 def main(_):
     torch.random.manual_seed(FLAGS.seed)
     torch.backends.cudnn.deterministic = True
@@ -111,8 +51,8 @@ def main(_):
 
     path = FLAGS.dataset_path
     train_path = os.path.join(path, "train.txt")
-    validation_path = os.path.join(path, "valid.txt")
-    test_path = os.path.join(path, "test.txt")
+    #validation_path = os.path.join(path, "valid.txt")
+    #test_path = os.path.join(path, "test.txt")
 
     entity2id, relation2id = data.create_mappings(train_path)
 
@@ -126,12 +66,7 @@ def main(_):
 
     train_set = data.FB15KDataset(train_path, entity2id, relation2id)
     train_generator = torch_data.DataLoader(train_set, batch_size=batch_size)
-    validation_set = data.FB15KDataset(validation_path, entity2id, relation2id)
-    validation_generator = torch_data.DataLoader(
-        validation_set, batch_size=FLAGS.validation_batch_size)
-    test_set = data.FB15KDataset(test_path, entity2id, relation2id)
-    test_generator = torch_data.DataLoader(
-        test_set, batch_size=FLAGS.validation_batch_size)
+
     # save id head-relation-tail
 
     #####################################################################
@@ -141,24 +76,16 @@ def main(_):
     model = model.to(device)
     optimizer = optim.SGD(model.parameters(), lr=learning_rate)
 
-    summary_writer = tensorboard.SummaryWriter(
-        log_dir=FLAGS.tensorboard_log_dir)
     start_epoch_id = 1
-    step = 0
-    best_score = 0.0
-    if FLAGS.checkpoint_path:
-        start_epoch_id, step, best_score = storage.load_checkpoint(
-            FLAGS.checkpoint_path, model, optimizer)
-
-    print(model)
+    print("Pretrain with TransE!")
+    print("_____________________")
+    print("training TransE")
 
     # Training loop
     entities_id_order = {}
     relations_id_order = {}
 
-    for epoch_id in range(start_epoch_id, epochs + 1):
-        loss_impacting_samples_count = 0
-        samples_count = 0
+    for _ in range(start_epoch_id, epochs + 1):
         model.train()
 
         for local_heads, local_relations, local_tails in train_generator:
@@ -195,77 +122,93 @@ def main(_):
 
             optimizer.zero_grad()
 
-            loss, pd, nd = model(positive_triples, negative_triples)
+            loss, _, _ = model(positive_triples, negative_triples)
             loss.mean().backward()
 
-            summary_writer.add_scalar(
-                'Loss/train', loss.mean().data.cpu().numpy(), global_step=step)
-            summary_writer.add_scalar(
-                'Distance/positive', pd.sum().data.cpu().numpy(), global_step=step)
-            summary_writer.add_scalar(
-                'Distance/negative', nd.sum().data.cpu().numpy(), global_step=step)
-
-            loss = loss.data.cpu()
-            loss_impacting_samples_count += loss.nonzero().size()[0]
-            samples_count += loss.size()[0]
             optimizer.step()
-            step += 1
-        summary_writer.add_scalar('Metrics/loss_impacting_samples', loss_impacting_samples_count / samples_count * 100,
-                                  global_step=epoch_id)
-
     # mapping embedding vector with id order
     ##########################################################################
-    triplet_emb_matrix = np.empty(
+    positive_emb_matrix = np.empty(
         (len(train_set), 3, vector_length), dtype=float)
     dtype = [("distance", float), ("order", int)]
     distances_inx = []
+    target_hrt_order = []
     for inx in range(len(train_set.data)):
         (h, r, t) = train_set.__getitem__(inx)
+        target_hrt_order.append([h, r, t])
         head_order = entities_id_order[h]
         tail_order = entities_id_order[t]
         relation_order = relations_id_order[r]
-        triplet_emb_matrix[inx] = [model.entities_emb.weight.data.numpy()[head_order], model.relations_emb.weight.data.numpy()[
+        positive_emb_matrix[inx] = [model.entities_emb.weight.data.numpy()[head_order], model.relations_emb.weight.data.numpy()[
             relation_order], model.entities_emb.weight.data.numpy()[tail_order]]
         distances_inx.append((np.linalg.norm((model.entities_emb.weight.data.numpy()[head_order] + model.relations_emb.weight.data.numpy()[
             relation_order] - model.entities_emb.weight.data.numpy()[tail_order]), ord=1), inx))
 
     ##########################################################################
-
+    print("Training TransE has finished!!!")
     # take 10% norm_1(h+r-t) smallest
-    temp = np.array(distances_inx, dtype=dtype)
-    temp = np.sort(temp, order="distance")
-    k_percent_lowest = temp[:int(len(distances_inx)*0.1), ]
-    target_k_percent = triplet_emb_matrix[[val[1] for val in k_percent_lowest]]
-    target_k_percent = target_k_percent.reshape(
-        (len(target_k_percent), 3*vector_length,))
-    confident_score = np.ones((len(train_set), 1), dtype=float)
+    print("_______________________________")
+    print("Start the training NoiGANs")
+    # k persent is choosen 10%
+    k = 0.1
+    N = 1
+    for i in range(0, N):
+        temp = np.array(distances_inx, dtype=dtype)
+        temp = np.sort(temp, order="distance")
+        k_percent_lowest = temp[:int(len(distances_inx)*k), ]
+        target_k_percent = positive_emb_matrix[[
+            val[1] for val in k_percent_lowest]]
+        # sent k_percent to GANs model
+        hrt_vecs = torch.Tensor([target_k_percent[i][0] + target_k_percent[i][1] +
+                                 target_k_percent[i][2] for i in range(0, len(target_k_percent))]).float()
+        # training GANs with 200 epoches
+        lr4GANs = 0.01
+        batch_size_in_k_percent = 256
+        epoches4GAns = 1
+        D, G = GANs.run(hrt_vecs, vector_length, lr4GANs,
+                        batch_size_in_k_percent, epoches4GAns)
 
-    # make folder to save the target embedding vector
-    folder = "target_entities_emb"
-    path = os.path.join("./", folder)
-    if not os.path.exists(folder):
-        os.mkdir(path)
-    np.savetxt(
-        path + "/" + "target_entities_emb.txt", target_k_percent)
-    if epoch_id % FLAGS.validation_freq == 0:
-        model.eval()
-        _, _, hits_at_10, _ = test(model=model, data_generator=validation_generator,
-                                   entities_count=len(entity2id),
-                                   device=device, summary_writer=summary_writer,
-                                   epoch_id=epoch_id, metric_suffix="val")
-        score = hits_at_10
-        if score > best_score:
-            best_score = score
-            storage.save_checkpoint(
-                model, optimizer, epoch_id, step, best_score)
+        all_hrt = torch.from_numpy(
+            positive_emb_matrix).float()
+        concat_all_hrt = torch.reshape(
+            all_hrt, ((len(all_hrt), 1, 3*vector_length))).float()
+        generated_neg_triplets = G.forward(concat_all_hrt)
+        generated_neg_triplets = torch.reshape(
+            generated_neg_triplets, ((len(all_hrt), 3, vector_length)))
+        all_hrt_computed = torch.sum(all_hrt, dim=1).float()
+        C_scores = D.forward(
+            all_hrt_computed)
+        C_scores_4_all_hrt = torch.ones_like(concat_all_hrt)
+        for i in range(len(concat_all_hrt)):
+            C_scores_4_all_hrt[i] = C_scores[i]*concat_all_hrt[i]
+        C_scores_4_all_hrt = torch.reshape(
+            C_scores_4_all_hrt, ((len(all_hrt), 3, vector_length)))
 
-    # Testing the best checkpoint on test dataset
-    # storage.load_checkpoint("checkpoint.tar", model, optimizer)
-    # best_model = model.to(device)
-    # best_model.eval()
-    # scores = test(model=best_model, data_generator=test_generator, entities_count=len(entity2id), device=device,
-    #               summary_writer=summary_writer, epoch_id=1, metric_suffix="test")
-    # print("Test scores: ", scores)
+        # create NoiGANs
+        target_hrt_order = torch.tensor(target_hrt_order)
+        noiGANs = NoiGANs_definition.NoiAwareKGE(
+            n_samples=len(C_scores_4_all_hrt), device=device, emb_dim=vector_length, norm=norm, margin=margin)
+        noiGANs = noiGANs.to(device)
+        optimizer = optim.SGD(noiGANs.parameters(), lr=learning_rate)
+        loader = torch_data.DataLoader(
+            range(len(C_scores_4_all_hrt)), batch_size)
+        for _ in range(start_epoch_id, epochs + 1):
+            noiGANs.train()
+            for inx in loader:
+                pos_samples = C_scores_4_all_hrt[inx.numpy()]
+                pos_samples = pos_samples.to(device)
+                neg_samples = generated_neg_triplets[inx.numpy()]
+                neg_samples = neg_samples.to(device)
+
+                optimizer.zero_grad()
+                print("a")
+                loss = noiGANs(pos_samples, neg_samples, inx)
+                print("aa")
+                loss.mean().backward()
+                print("aaa")
+                optimizer.step()
+
+    print("Training the NoiGANs has finished!!!")
 
 
 if __name__ == '__main__':
