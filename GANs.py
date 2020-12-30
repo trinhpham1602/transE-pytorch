@@ -22,12 +22,12 @@ class Discriminator(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, emb_dim_concat):
+    def __init__(self, hrt_concat_dim):
         super().__init__()
         self.gen = nn.Sequential(
-            nn.Linear(emb_dim_concat, 128),
+            nn.Linear(hrt_concat_dim, 128),
             nn.ReLU(),
-            nn.Linear(128, emb_dim_concat),
+            nn.Linear(128, 1),
             nn.Sigmoid(),
         )
 
@@ -49,15 +49,13 @@ def run(hrt_vecs, emb_dim, lr, batch_size, epoches):
 
             # Train Discriminator: max log(D(x)) + log(1 - D(G(z)))
             noise = torch.randn(batch_size, 3*emb_dim).to(
-                device)  # random batch_size dòng và emb_dim cột
-            fake_hrt = gen(noise)
-            fake_hrt = fake_hrt.detach().numpy().reshape((len(fake_hrt), 3, emb_dim))
-            fake_hrt = np.array([fake_hrt[i][0] + fake_hrt[i][1] + fake_hrt[i][2]
-                                 for i in range(0, len(fake_hrt))])
-            fake_hrt = torch.from_numpy(fake_hrt).float()
+                device)
+            fake_probab = gen(noise)
+            fake_trips = noise[fake_probab[:, 0] > 0.5]
+            fake_trips = fake_trips.reshape((len(fake_trips), 3, emb_dim))
             disc_real = disc(hrt_vec.float()).view(-1)
             lossD_real = criterion(disc_real, torch.ones_like(disc_real))
-            disc_fake = disc(fake_hrt).view(-1)
+            disc_fake = disc(fake_trips).view(-1)
             lossD_fake = criterion(disc_fake, torch.zeros_like(disc_fake))
             lossD = (lossD_real + lossD_fake) / 2
             disc.zero_grad()
@@ -67,7 +65,7 @@ def run(hrt_vecs, emb_dim, lr, batch_size, epoches):
             # Train Generator: min log(1 - D(G(z))) <-> max log(D(G(z))
             # where the second option of maximizing doesn't suffer from
             # saturating gradients
-            output = disc(fake_hrt).view(-1)
+            output = disc(fake_trips).view(-1)
             lossG = criterion(output, torch.ones_like(output))
             gen.zero_grad()
             lossG.backward()
