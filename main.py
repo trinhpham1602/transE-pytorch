@@ -26,7 +26,7 @@ flags.DEFINE_float("margin", default=1.0,
                    help="Margin value in margin-based ranking loss.")
 flags.DEFINE_integer(
     "norm", default=1, help="Norm used for calculating dissimilarity metric (usually 1 or 2).")
-flags.DEFINE_integer("epoches", default=2000,
+flags.DEFINE_integer("epoches", default=300,
                      help="Number of training epoches.")
 flags.DEFINE_string("dataset_path", default="./data/FB15k-237",
                     help="Path to dataset.")
@@ -117,7 +117,7 @@ def main(_):
             optimizer.step()
     # take k% lowest h + r - t
     k = 0.4
-    N = 1
+    N = 300
     for i in range(N):
         entities_emb = model.entities_emb.weight.data
         relations_emb = model.relations_emb.weight.data
