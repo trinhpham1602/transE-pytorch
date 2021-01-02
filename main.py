@@ -201,6 +201,7 @@ def main(_):
             k_percent_lowest[i] = hrt_embs[norm_order[i][1]]
 
         # define GANs
+        k_percent_lowest = k_percent_lowest.to(device)
         D, G = GANs.run(k_percent_lowest, emb_dim,
                         learning_rate, batch_size, epoches)
         # train noiAwareKGE
