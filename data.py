@@ -1,7 +1,7 @@
 from collections import Counter
 from torch.utils import data
 from typing import Dict, Tuple
-
+import os
 Mapping = Dict[str, int]
 
 
@@ -18,11 +18,19 @@ def create_mappings(dataset_path: str) -> Tuple[Mapping, Mapping]:
             relation_counter.update([relation])
     entity2id = {}
     relation2id = {}
+    directory = "output"
+    path = os.path.join("./", directory)
+    if not os.path.exists(path):
+        os.mkdir(path)
+    f = open("./output/entity2id.txt", "w")
     for idx, (mid, _) in enumerate(entity_counter.most_common()):
         entity2id[mid] = idx
-
+        f.write(mid + " " + str(idx) + "\n")
+    f = open("./output/relation2id.txt", "w")
     for idx, (relation, _) in enumerate(relation_counter.most_common()):
         relation2id[relation] = idx
+        f.write(relation + " " + str(idx) + "\n")
+    f.close()
     return entity2id, relation2id
 
 
