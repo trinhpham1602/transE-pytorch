@@ -29,6 +29,9 @@ class NoiAwareKGE(nn.Module):
         tails = triplets[:, 2]
         return torch.cat((self.entities_emb(heads), self.relations_emb(relations), self.entities_emb(tails)), dim=1)
 
+    def predict(self, triplets: torch.LongTensor):
+        return self._distance(triplets)
+
     def forward(self, positive_triples, negative_triples, D: GANs.Discriminator, G: GANs.Generator):
         # G take hrt concat
         distance_pos_triples = self._distance(positive_triples)

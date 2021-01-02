@@ -20,6 +20,7 @@ def create_mappings(dataset_path: str) -> Tuple[Mapping, Mapping]:
     relation2id = {}
     for idx, (mid, _) in enumerate(entity_counter.most_common()):
         entity2id[mid] = idx
+
     for idx, (relation, _) in enumerate(relation_counter.most_common()):
         relation2id[relation] = idx
     return entity2id, relation2id

@@ -15,11 +15,12 @@ import numpy as np
 import GANs
 import noiAwareKGE as noiAware_difinition
 from time import perf_counter
+import glob
 FLAGS = flags.FLAGS
 flags.DEFINE_float("lr", default=0.01, help="Learning rate value.")
 flags.DEFINE_integer("seed", default=1234, help="Seed value.")
 flags.DEFINE_integer("batch_size", default=128, help="Maximum batch size.")
-flags.DEFINE_integer("validation_batch_size", default=64,
+flags.DEFINE_integer("num_splits", default=8,
                      help="Maximum batch size during model validation.")
 flags.DEFINE_integer("emb_dim", default=50,
                      help="Length of entity/relation vector.")
@@ -44,6 +45,62 @@ HITS_AT_10_SCORE = float
 MRR_SCORE = float
 METRICS = Tuple[HITS_AT_1_SCORE, HITS_AT_3_SCORE, HITS_AT_10_SCORE, MRR_SCORE]
 
+######
+
+
+def test(model: torch.nn.Module, data_generator: torch_data.DataLoader, entities_count: int, device: torch.device) -> METRICS:
+    examples_count = 0.0
+    hits_at_1 = 0.0
+    hits_at_3 = 0.0
+    hits_at_10 = 0.0
+    mrr = 0.0
+
+    entity_ids = torch.arange(end=entities_count, device=device).unsqueeze(0)
+    for head, relation, tail in data_generator:
+        current_batch_size = head.size()[0]
+
+        head, relation, tail = head.to(
+            device), relation.to(device), tail.to(device)
+        all_entities = entity_ids.repeat(current_batch_size, 1)
+        heads = head.reshape(-1, 1).repeat(1, all_entities.size()[1])
+        relations = relation.reshape(-1, 1).repeat(1, all_entities.size()[1])
+        tails = tail.reshape(-1, 1).repeat(1, all_entities.size()[1])
+
+        # Check all possible tails
+        triplets = torch.stack(
+            (heads, relations, all_entities), dim=2).reshape(-1, 3)
+        tails_predictions = model.predict(
+            triplets).reshape(current_batch_size, -1)
+        # Check all possible heads
+        triplets = torch.stack(
+            (all_entities, relations, tails), dim=2).reshape(-1, 3)
+        heads_predictions = model.predict(
+            triplets).reshape(current_batch_size, -1)
+
+        # Concat predictions
+        predictions = torch.cat((tails_predictions, heads_predictions), dim=0)
+        ground_truth_entity_id = torch.cat(
+            (tail.reshape(-1, 1), head.reshape(-1, 1)))
+
+        hits_at_1 += metric.hit_at_k(predictions,
+                                     ground_truth_entity_id, device=device, k=1)
+        hits_at_3 += metric.hit_at_k(predictions,
+                                     ground_truth_entity_id, device=device, k=3)
+        hits_at_10 += metric.hit_at_k(predictions,
+                                      ground_truth_entity_id, device=device, k=10)
+        mrr += metric.mrr(predictions, ground_truth_entity_id)
+
+        examples_count += predictions.size()[0]
+
+    hits_at_1_score = hits_at_1 / examples_count * 100
+    hits_at_3_score = hits_at_3 / examples_count * 100
+    hits_at_10_score = hits_at_10 / examples_count * 100
+    mrr_score = mrr / examples_count * 100
+
+    return hits_at_1_score, hits_at_3_score, hits_at_10_score, mrr_score
+
+######
+
 
 def main(_):
     start = perf_counter()
@@ -52,9 +109,14 @@ def main(_):
     torch.backends.cudnn.benchmark = False
 
     path = FLAGS.dataset_path
-    train_path = os.path.join(path, "train.txt")
-    #validation_path = os.path.join(path, "valid.txt")
-    #test_path = os.path.join(path, "test.txt")
+    read_all_file = glob.glob(
+        path + "/" + "*.txt")
+    with open(path + "/" + "all_triples.txt", "wb") as outfile:
+        for f in read_all_file:
+            with open(f, "rb") as infile:
+                outfile.write(infile.read())
+    train_path = os.path.join(path, "all_triples.txt")
+    test_path = os.path.join(path, "test.txt")
 
     entity2id, relation2id = data.create_mappings(train_path)
 
@@ -156,7 +218,17 @@ def main(_):
                 loss.mean().backward()
                 optimizer.step()
     end = perf_counter()
-    print(end - start)
+    print("The NoiAwareGAN is trained")
+    print("total time pretrain and train NoiAwareGANs is ", end - start)
+    print("---------------------------------------------")
+    print("start test noiGANs")
+    test_set = data.KGDataset(test_path, entity2id, relation2id)
+    test_generator = torch_data.DataLoader(
+        test_set, batch_size=int(len(test_set)/FLAGS.num_splits))
+    model.eval()
+    scores = test(model=model, data_generator=test_generator,
+                  entities_count=len(entity2id), device=device)
+    print("Test scores: ", scores)
 
 
 if __name__ == '__main__':
