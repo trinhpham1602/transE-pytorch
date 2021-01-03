@@ -172,8 +172,8 @@ def main(_):
     print("The NoiAwareGAN is trained")
     print("total time pretrain and train NoiAwareGANs is ", end - start)
     print("---------------------------------------------")
-    entities_emb = model.entities_emb.weight.data.numpy()
-    relations_emb = model.relations_emb.weight.data.numpy()
+    entities_emb = model.entities_emb.weight.data.cpu().numpy()
+    relations_emb = model.relations_emb.weight.data.cpu().numpy()
     np.savetxt("./output/entities_emb.txt", entities_emb)
     np.savetxt("./output/relations_emb.txt", relations_emb)
 
