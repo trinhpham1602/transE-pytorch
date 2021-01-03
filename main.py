@@ -85,9 +85,9 @@ def main(_):
     start_epoch_id = 1
     neg_blocks = []
     pos_blocks = []
-    for _ in range(start_epoch_id, epoches + 1):
+    for epoch in range(start_epoch_id, epoches + 1):
         model.train()
-        print("start the epoch: ", start_epoch_id)
+        print("start the epoch: ", epoch)
 
         for local_heads, local_relations, local_tails in train_generator:
             local_heads, local_relations, local_tails = (local_heads.to(device), local_relations.to(device),
@@ -116,7 +116,7 @@ def main(_):
             loss.mean().backward()
 
             optimizer.step()
-        print("Finished the epoch: ", start_epoch_id)
+        print("Finished the epoch: ", epoch)
     # take k% lowest h + r - t
     print("Finished the pretrain NoiAwareGANs with TransE")
     print("---------------------------------------------")
