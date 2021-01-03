@@ -17,7 +17,7 @@ import glob
 FLAGS = flags.FLAGS
 flags.DEFINE_float("lr", default=0.01, help="Learning rate value.")
 flags.DEFINE_integer("seed", default=1234, help="Seed value.")
-flags.DEFINE_integer("batch_size", default=256, help="Maximum batch size.")
+flags.DEFINE_integer("batch_size", default=128, help="Maximum batch size.")
 flags.DEFINE_integer("validation_batch_size", default=64,
                      help="Maximum batch size during model validation.")
 flags.DEFINE_integer("emb_dim", default=100,
@@ -122,7 +122,7 @@ def main(_):
     print("---------------------------------------------")
     print("Start the training NoiAwareGANs")
     k = 0.4
-    N = 300
+    N = 10
     for i in range(N):
         print("interator: ", i + 1)
         entities_emb = model.entities_emb.weight.data
