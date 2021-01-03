@@ -87,6 +87,7 @@ def main(_):
     pos_blocks = []
     for _ in range(start_epoch_id, epoches + 1):
         model.train()
+        print("start the epoch: ", start_epoch_id)
 
         for local_heads, local_relations, local_tails in train_generator:
             local_heads, local_relations, local_tails = (local_heads.to(device), local_relations.to(device),
@@ -115,10 +116,15 @@ def main(_):
             loss.mean().backward()
 
             optimizer.step()
+        print("Finished the epoch: ", start_epoch_id)
     # take k% lowest h + r - t
+    print("Finished the pretrain NoiAwareGANs with TransE")
+    print("---------------------------------------------")
+    print("Start the training NoiAwareGANs")
     k = 0.4
     N = 300
     for i in range(N):
+        print("interator: ", i + 1)
         entities_emb = model.entities_emb.weight.data
         relations_emb = model.relations_emb.weight.data
         hrt_embs = torch.zeros((N_triples, 3, emb_dim), dtype=float)
@@ -161,6 +167,7 @@ def main(_):
                 loss = criterion(loss)
                 loss.mean().backward()
                 optimizer.step()
+        print("Finished interator: ", i + 1)
     end = perf_counter()
     print("The NoiAwareGAN is trained")
     print("total time pretrain and train NoiAwareGANs is ", end - start)
