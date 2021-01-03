@@ -143,7 +143,7 @@ def main(_):
         k_percent_lowest = torch.zeros((int(k*N_triples), 3, emb_dim))
         for i in range(int(k*N_triples)):
             k_percent_lowest[i] = hrt_embs[norm_order[i][1]]
-
+        k_percent_lowest = k_percent_lowest.to(device)
         # define GANs
         D, G = GANs.run(k_percent_lowest, emb_dim,
                         learning_rate, batch_size, epoches)

@@ -51,7 +51,7 @@ class NoiAwareKGE(nn.Module):
         pos_scores = - \
             torch.log(torch.sigmoid(self.margin -
                                     distance_pos_triples))
-        neg_scores = 1/len(true_neg_triples)*torch.sum(distance_neg_triples)
+        neg_scores = 1/len(negative_triples)*torch.sum(distance_neg_triples)
         sum_scores = torch.sum(D.forward(positive_triples)
                                * (pos_scores + neg_scores))
         return sum_scores
