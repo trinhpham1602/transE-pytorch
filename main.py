@@ -26,13 +26,13 @@ flags.DEFINE_float("margin", default=1.0,
                    help="Margin value in margin-based ranking loss.")
 flags.DEFINE_integer(
     "norm", default=1, help="Norm used for calculating dissimilarity metric (usually 1 or 2).")
-flags.DEFINE_integer("epoches", default=300,
-                     help="Number of training epoches.")
+flags.DEFINE_integer("epochs", default=300,
+                     help="Number of training epochs.")
 flags.DEFINE_string("dataset_path", default="./data/FB15k-237",
                     help="Path to dataset.")
 flags.DEFINE_bool("use_gpu", default=True, help="Flag enabling gpu usage.")
 # flags.DEFINE_integer("validation_freq", default=10,
-#                      help="Validate model every X epoches.")
+#                      help="Validate model every X epochs.")
 # flags.DEFINE_string("checkpoint_path", default="",
 #                     help="Path to model checkpoint (by default train from scratch).")
 # flags.DEFINE_string("tensorboard_log_dir", default="./runs",
@@ -69,7 +69,7 @@ def main(_):
     margin = FLAGS.margin
     norm = FLAGS.norm
     learning_rate = FLAGS.lr
-    epoches = FLAGS.epoches
+    epochs = FLAGS.epochs
     device = torch.device('cuda') if FLAGS.use_gpu else torch.device('cpu')
 
     train_set = data.KGDataset(train_path, entity2id, relation2id)
@@ -85,7 +85,7 @@ def main(_):
     start_epoch_id = 1
     neg_blocks = []
     pos_blocks = []
-    for epoch in range(start_epoch_id, epoches + 1):
+    for epoch in range(start_epoch_id, epochs + 1):
         model.train()
         print("start the epoch: ", epoch)
 
@@ -122,7 +122,7 @@ def main(_):
     print("---------------------------------------------")
     print("Start the training NoiAwareGANs")
     k = 0.4
-    N = 10
+    N = 5
     for i in range(N):
         print("interator: ", i + 1)
         entities_emb = model.entities_emb.weight.data
@@ -152,14 +152,14 @@ def main(_):
         k_percent_lowest = k_percent_lowest.to(device)
         # define GANs
         D, G = GANs.run(k_percent_lowest, emb_dim,
-                        learning_rate, batch_size, epoches)
+                        learning_rate, batch_size, epochs-100)
         # train noiAwareKGE
         model = noiAware_difinition.NoiAwareKGE(
             model.entities_emb, model.relations_emb, emb_dim, device=device)
         model = model.to(device)
         optimizer = optim.SGD(model.parameters(), lr=learning_rate)
         criterion = nn.LogSigmoid()
-        for _ in range(start_epoch_id, epoches + 1):
+        for _ in range(start_epoch_id, epochs - 100 + 1):  # 200 epochs
             model.train()
             for inx in range(len(train_generator)):
                 optimizer.zero_grad()
