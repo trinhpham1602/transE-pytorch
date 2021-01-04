@@ -25,23 +25,11 @@ flags.DEFINE_float("margin", default=1.0,
                    help="Margin value in margin-based ranking loss.")
 flags.DEFINE_integer(
     "norm", default=1, help="Norm used for calculating dissimilarity metric (usually 1 or 2).")
-flags.DEFINE_integer("epochs", default=2000,
+flags.DEFINE_integer("epochs", default=1,
                      help="Number of training epochs.")
 flags.DEFINE_string("dataset_path", default="./data/FB15k-237",
                     help="Path to dataset.")
 flags.DEFINE_bool("use_gpu", default=True, help="Flag enabling gpu usage.")
-# flags.DEFINE_integer("validation_freq", default=10,
-#                      help="Validate model every X epochs.")
-# flags.DEFINE_string("checkpoint_path", default="",
-#                     help="Path to model checkpoint (by default train from scratch).")
-# flags.DEFINE_string("tensorboard_log_dir", default="./runs",
-#                     help="Path for tensorboard log directory.")
-
-HITS_AT_1_SCORE = float
-HITS_AT_3_SCORE = float
-HITS_AT_10_SCORE = float
-MRR_SCORE = float
-METRICS = Tuple[HITS_AT_1_SCORE, HITS_AT_3_SCORE, HITS_AT_10_SCORE, MRR_SCORE]
 
 
 def main(_):
@@ -119,7 +107,8 @@ def main(_):
     print("---------------------------------------------")
     print("Start the training NoiAwareGANs")
     k = 0.7
-    N = 100
+    N = 1
+    all_triples_id = []
     for time in range(N):
         entities_emb = model.entities_emb.weight.data
         relations_emb = model.relations_emb.weight.data
@@ -129,6 +118,7 @@ def main(_):
         # in train_set, lines is random and diference with origin data set
         for i in range(N_triples):
             (h_id, r_id, t_id) = train_set.__getitem__(i)
+            all_triples_id.append([h_id, r_id, t_id])
             h_emb = entities_emb[h_id]
             r_emb = relations_emb[r_id]
             t_emb = entities_emb[t_id]
@@ -147,7 +137,7 @@ def main(_):
             k_percent_lowest[i] = hrt_embs[norm_order[i][1]]
         k_percent_lowest = k_percent_lowest.to(device)
         # define GANs
-        epochs4GANs = 1000
+        epochs4GANs = 1
         D, G = GANs.run(k_percent_lowest, emb_dim,
                         learning_rate, batch_size, epochs4GANs)
         # train noiAwareKGE
@@ -173,7 +163,41 @@ def main(_):
     relations_emb = model.relations_emb.weight.data.cpu().numpy()
     np.savetxt("./output/entities_emb.txt", entities_emb)
     np.savetxt("./output/relations_emb.txt", relations_emb)
+    print("start testing the noiAwareGANs!")
+    start = perf_counter()
+
+    mrr, hist1, hist3, hist10 = test(
+        path, entity2id, relation2id, model, all_triples_id)
+    end = perf_counter()
+    print("total time to testNoiAwareGANs is ", end - start)
+    print(mrr, hist1, hist3, hist10)
     print("Done!")
+
+
+def test(dataset_path, entity2id, relation2id, model: noiAware_difinition.NoiAwareKGE, all_triples, num_split=8, inx_num_split=1):
+    hrt_test = []
+    with open(dataset_path + "/" + "test.txt", "r") as f:
+        for line in f:
+            head, relation, tail = line[:-1].split("\t")
+            hrt_test.append(
+                [entity2id[head], relation2id[relation], entity2id[tail]])
+    ranks = []
+    start_batch_test = int(len(hrt_test)/num_split*inx_num_split)
+    end_batch_test = int(len(hrt_test)/num_split*(inx_num_split + 1))
+    for a_triple_in_test in hrt_test[start_batch_test:end_batch_test]:
+        t_ = [val for val in entity2id.values() if val != a_triple_in_test[2]]
+        hrt_ = [(a_triple_in_test[0], a_triple_in_test[1], t) for t in t_]
+        filtered_hrt_ = torch.tensor(
+            [hrt for hrt in hrt_ if hrt not in all_triples])
+        score_in = model.predict(torch.tensor([a_triple_in_test]))
+        scores_test = model.predict(filtered_hrt_)
+        rank = len([score for score in scores_test if score > score_in]) + 1
+        ranks.append(rank)
+    mrr = 1/len(ranks)*sum([1/rank for rank in ranks])
+    hist1 = len([rank for rank in ranks if rank == 1])/len(ranks)
+    hist3 = len([rank for rank in ranks if rank <= 3])/len(ranks)
+    hist10 = len([rank for rank in ranks if rank <= 10])/len(ranks)
+    return mrr, hist1, hist3, hist10
 
 
 if __name__ == '__main__':
