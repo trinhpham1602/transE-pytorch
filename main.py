@@ -7,7 +7,6 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 from torch.utils import data as torch_data
-from torch.utils import tensorboard
 from typing import Tuple
 import numpy as np
 import GANs
@@ -17,7 +16,7 @@ import glob
 FLAGS = flags.FLAGS
 flags.DEFINE_float("lr", default=0.0001, help="Learning rate value.")
 flags.DEFINE_integer("seed", default=1234, help="Seed value.")
-flags.DEFINE_integer("batch_size", default=128, help="Maximum batch size.")
+flags.DEFINE_integer("batch_size", default=512, help="Maximum batch size.")
 flags.DEFINE_integer("validation_batch_size", default=64,
                      help="Maximum batch size during model validation.")
 flags.DEFINE_integer("emb_dim", default=100,
