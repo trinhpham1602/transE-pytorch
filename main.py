@@ -15,7 +15,7 @@ import noiAwareKGE as noiAware_difinition
 from time import perf_counter
 import glob
 FLAGS = flags.FLAGS
-flags.DEFINE_float("lr", default=0.01, help="Learning rate value.")
+flags.DEFINE_float("lr", default=0.0001, help="Learning rate value.")
 flags.DEFINE_integer("seed", default=1234, help="Seed value.")
 flags.DEFINE_integer("batch_size", default=128, help="Maximum batch size.")
 flags.DEFINE_integer("validation_batch_size", default=64,
@@ -26,7 +26,7 @@ flags.DEFINE_float("margin", default=1.0,
                    help="Margin value in margin-based ranking loss.")
 flags.DEFINE_integer(
     "norm", default=1, help="Norm used for calculating dissimilarity metric (usually 1 or 2).")
-flags.DEFINE_integer("epochs", default=300,
+flags.DEFINE_integer("epochs", default=2000,
                      help="Number of training epochs.")
 flags.DEFINE_string("dataset_path", default="./data/FB15k-237",
                     help="Path to dataset.")
@@ -85,10 +85,9 @@ def main(_):
     start_epoch_id = 1
     neg_blocks = []
     pos_blocks = []
+    print("training TransE with %d epochs!", epochs)
     for epoch in range(start_epoch_id, epochs + 1):
         model.train()
-        print("start the epoch: ", epoch)
-
         for local_heads, local_relations, local_tails in train_generator:
             local_heads, local_relations, local_tails = (local_heads.to(device), local_relations.to(device),
                                                          local_tails.to(device))
@@ -118,13 +117,11 @@ def main(_):
             optimizer.step()
         print("Finished the epoch: ", epoch)
     # take k% lowest h + r - t
-    print("Finished the pretrain NoiAwareGANs with TransE")
     print("---------------------------------------------")
     print("Start the training NoiAwareGANs")
-    k = 0.4
+    k = 0.7
     N = 5
-    for i in range(N):
-        print("interator: ", i + 1)
+    for time in range(N):
         entities_emb = model.entities_emb.weight.data
         relations_emb = model.relations_emb.weight.data
         hrt_embs = torch.zeros((N_triples, 3, emb_dim), dtype=float)
@@ -152,14 +149,14 @@ def main(_):
         k_percent_lowest = k_percent_lowest.to(device)
         # define GANs
         D, G = GANs.run(k_percent_lowest, emb_dim,
-                        learning_rate, batch_size, epochs-100)
+                        learning_rate, batch_size, int(epochs/3))
         # train noiAwareKGE
         model = noiAware_difinition.NoiAwareKGE(
             model.entities_emb, model.relations_emb, emb_dim, device=device)
         model = model.to(device)
         optimizer = optim.SGD(model.parameters(), lr=learning_rate)
         criterion = nn.LogSigmoid()
-        for _ in range(start_epoch_id, epochs - 100 + 1):  # 200 epochs
+        for _ in range(start_epoch_id, epochs + 1):
             model.train()
             for inx in range(len(train_generator)):
                 optimizer.zero_grad()
@@ -167,7 +164,7 @@ def main(_):
                 loss = criterion(loss)
                 loss.mean().backward()
                 optimizer.step()
-        print("Finished interator: ", i + 1)
+        print("Finished interator: ", time + 1)
     end = perf_counter()
     print("The NoiAwareGAN is trained")
     print("total time pretrain and train NoiAwareGANs is ", end - start)
@@ -176,6 +173,7 @@ def main(_):
     relations_emb = model.relations_emb.weight.data.cpu().numpy()
     np.savetxt("./output/entities_emb.txt", entities_emb)
     np.savetxt("./output/relations_emb.txt", relations_emb)
+    print("Done!")
 
 
 if __name__ == '__main__':
