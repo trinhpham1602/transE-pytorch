@@ -120,7 +120,7 @@ def main(_):
     print("---------------------------------------------")
     print("Start the training NoiAwareGANs")
     k = 0.7
-    N = 5
+    N = 100
     for time in range(N):
         entities_emb = model.entities_emb.weight.data
         relations_emb = model.relations_emb.weight.data
@@ -148,8 +148,9 @@ def main(_):
             k_percent_lowest[i] = hrt_embs[norm_order[i][1]]
         k_percent_lowest = k_percent_lowest.to(device)
         # define GANs
+        epochs4GANs = 1000
         D, G = GANs.run(k_percent_lowest, emb_dim,
-                        learning_rate, batch_size, int(epochs/3))
+                        learning_rate, batch_size, epochs4GANs)
         # train noiAwareKGE
         model = noiAware_difinition.NoiAwareKGE(
             model.entities_emb, model.relations_emb, emb_dim, device=device)
